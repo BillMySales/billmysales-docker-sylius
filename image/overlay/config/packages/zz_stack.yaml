@@ -1,0 +1,32 @@
+# Settings of the Docker stack (copied into the Sylius-Standard project by
+# image/Dockerfile): everything site-specific comes from the environment.
+parameters:
+    # Defaults when the variables aren't set (e.g. `bin/console` in a build).
+    env(SYLIUS_MAILER_SENDER_NAME): 'Sylius'
+    env(SYLIUS_MAILER_SENDER_ADDRESS): 'no-reply@example.com'
+
+sylius_mailer:
+    sender:
+        name: '%env(SYLIUS_MAILER_SENDER_NAME)%'
+        address: '%env(SYLIUS_MAILER_SENDER_ADDRESS)%'
+
+framework:
+    # Symfony trusts these headers from SYMFONY_TRUSTED_PROXIES (compose.yaml).
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port']
+
+# The REST API (Shop and Admin, API Platform), on in every environment
+# (Sylius-Standard enables it only in dev): /api/v2/shop (storefronts, apps)
+# and /api/v2/admin (integrations; JWT from /api/v2/admin/administrators/token).
+sylius_api:
+    enabled: true
+
+# Logs to stderr (`docker compose logs`) instead of var/log/prod.log inside
+# the container, which grows without rotation; deprecation notices (several
+# per request) are dropped.
+when@prod:
+    monolog:
+        handlers:
+            nested:
+                path: 'php://stderr'
+            deprecation:
+                path: '/dev/null'

@@ -1,0 +1,79 @@
+# Caddy in front of the Sylius PHP-FPM container: TLS, static files, the front
+# controller and security headers.
+# Docs: https://caddyserver.com/docs/caddyfile/directives/php_fastcgi
+#
+# Static files come from /srv/public: the image's public/ copied there by
+# setup (assets, bundles) plus uploads mounted at /srv/public/media. PHP runs
+# in the `php` container, where the same files are under /app/public.
+{
+	# No admin API: config is static, reloads happen by restarting the container.
+	admin off
+
+	servers {
+		# Behind a reverse proxy on a private network, log the real client IP
+		# (X-Forwarded-For) and pass X-Forwarded-Proto on to Symfony.
+		trusted_proxies static private_ranges
+		# Client IP = the right-most untrusted address (can't be spoofed).
+		trusted_proxies_strict
+	}
+}
+
+(sylius) {
+	root * /srv/public
+	encode zstd gzip
+
+	request_body {
+		max_size {$UPLOAD_MAX_SIZE}
+	}
+
+	# One directive per header: in a single `header { }` block, Caddy applies
+	# the "?" (set if missing) fields together, only when all are missing.
+	header ?X-Content-Type-Options nosniff
+	header ?X-Frame-Options SAMEORIGIN
+	header ?Referrer-Policy strict-origin-when-cross-origin
+	header -Server
+	header -X-Powered-By
+
+	# Only the front controller runs PHP; other .php files and dotfiles are
+	# never served.
+	@blocked path /.* */.* *.php
+	@frontController path /index.php
+	handle @frontController {
+		php_fastcgi php:9000 {
+			root /app/public
+			env REMOTE_ADDR {client_ip}
+		}
+	}
+	handle @blocked {
+		respond 404
+	}
+
+	@static path /build/* /bundles/* /media/*
+	header @static Cache-Control "public, max-age=604800"
+
+	# Existing files are served; everything else (routes, image thumbnails
+	# not generated yet under /media/cache/resolve/) goes to index.php
+	# (php_fastcgi's default try_files).
+	handle {
+		php_fastcgi php:9000 {
+			root /app/public
+			env REMOTE_ADDR {client_ip}
+		}
+		file_server
+	}
+}
+
+# Public site. SITE_ADDRESS is ":80" for plain HTTP (local, or behind another
+# proxy) or a domain name, which makes Caddy obtain and renew a certificate
+# automatically ("localhost" uses Caddy's internal CA).
+{$SITE_ADDRESS} {
+	import sylius
+	log {
+		output stdout
+	}
+}
+
+# Internal-only site (port not published) for the container healthcheck.
+:8080 {
+	import sylius
+}

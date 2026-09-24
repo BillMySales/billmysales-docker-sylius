@@ -1,0 +1,44 @@
+# Spanish texts of Sylius' emails missing in its own translations (31 of 39
+# keys in Sylius 2.2); the project's translations override the bundles'.
+sylius:
+    email:
+        admin_password_reset:
+            hello: Hola
+            subject: Restablecer la contraseña de administrador
+            reset_your_password: Restablezca su contraseña
+            to_reset_your_password: Para restablecer su contraseña, haga clic en el siguiente enlace
+            to_reset_your_password_token: Para restablecer su contraseña, use el siguiente código
+            token: Su código para restablecer la contraseña es
+        contact_request:
+            content: Contenido
+            message_from: Mensaje de
+            subject: Solicitud de contacto
+        order_confirmation:
+            has_been_successfully_placed: fue recibido con éxito.
+            thank_you: ¡Gracias por comprar en nuestra tienda!
+            your_order_number: Su pedido N°
+        password_reset:
+            reset_your_password: Restablezca su contraseña
+            to_reset_your_password: Para restablecer su contraseña, haga clic en el siguiente enlace
+            to_reset_your_password_token: Para restablecer su contraseña, use el siguiente código
+            token: Su código para restablecer la contraseña es
+        shipment_confirmation:
+            has_been_sent_using: fue enviado mediante
+            thank_you_for_transaction: Gracias por su compra.
+            you_can_check_its_location_with_the_tracking_code: Puede seguir su envío con el código de seguimiento %tracking_code%.
+            your_order_with_number: Su pedido N°
+        user_registration:
+            start_shopping: Comenzar a comprar
+            subject: Registro de usuario
+            you_have_just_been_registered: Su cuenta fue creada. ¡Gracias!
+        verification_token:
+            message: 'Verifique su cuenta con el código: '
+            to_verify_your_email_address: Para verificar su correo electrónico, haga clic en el siguiente enlace
+            verify_your_email_address: Verifique su correo electrónico
+        user:
+            account_verification:
+                greeting: Hola
+                message: 'Verifique su cuenta con el código: '
+                statement: Verifique su correo electrónico
+                strategy: Para verificar su correo electrónico, haga clic en el siguiente enlace
+                subject: Verificación de correo electrónico

@@ -1,0 +1,47 @@
+# Keep the stack's data in local directories instead of named volumes, so it
+# is visible from the host (and easy to include in host-level backups).
+#
+# In .env:
+#   COMPOSE_FILE=compose.yaml:overrides/local-dirs.yaml
+#   DATA_DIR=./data        # optional, default ./data (relative to compose.yaml)
+#
+# Only the directories you keep here change; delete the lines you don't need
+# (e.g. keep just `media`, `keys` and `backups`). Existing data in the named
+# volumes is NOT moved: switch before the first `up`, or restore a backup
+# afterwards. `public` holds only files copied from the image (setup copies
+# them again when the image changes). `setup` gives `media` and `keys` to
+# www-data (UID 82) on every run, also on Linux. Backup files are root-owned
+# with mode 0600.
+
+x-sylius-dirs: &sylius-dirs
+  - ${DATA_DIR:-./data}/keys:/var/lib/sylius/keys
+  - ${DATA_DIR:-./data}/media:/app/public/media
+
+services:
+  db:
+    volumes:
+      - ${DATA_DIR:-./data}/db:/var/lib/mysql
+  setup:
+    volumes:
+      - ${DATA_DIR:-./data}/keys:/var/lib/sylius/keys
+      - ${DATA_DIR:-./data}/media:/app/public/media
+      - ${DATA_DIR:-./data}/public:/srv/public
+  php:
+    volumes: *sylius-dirs
+  worker:
+    volumes: *sylius-dirs
+  cron:
+    volumes: *sylius-dirs
+  console:
+    volumes: *sylius-dirs
+  caddy:
+    volumes:
+      - ${DATA_DIR:-./data}/public:/srv/public:ro
+      - ${DATA_DIR:-./data}/media:/srv/public/media:ro
+      - ${DATA_DIR:-./data}/caddy/data:/data
+      - ${DATA_DIR:-./data}/caddy/config:/config
+  backup:
+    volumes:
+      - ${DATA_DIR:-./data}/media:/data/media
+      - ${DATA_DIR:-./data}/keys:/data/keys
+      - ${DATA_DIR:-./data}/backups:/backups

@@ -1,0 +1,323 @@
+# Sylius stack: Caddy (TLS, static files) + PHP-FPM with Sylius (own image
+# built from image/: Sylius-Standard) + MariaDB, with setup, worker and cron
+# services and optional backups and Mailpit.
+#
+# Quick start (development):
+#   cp .env.dev.example .env
+#   docker compose up -d --build
+#   docker compose logs -f setup   # wait for "==> Done"
+#
+# Production: start from .env.prod.example instead. See README.md.
+#
+# Required variables have no default: compose refuses to start without them.
+
+name: ${COMPOSE_PROJECT_NAME:-sylius}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: "${LOG_MAX_FILE:-3}"
+
+# The Sylius image (image/Dockerfile), shared by setup, php, worker and cron.
+x-sylius: &sylius
+  image: ${SYLIUS_IMAGE:-sylius-fpm}:${SYLIUS_VERSION:-2.2.9}-php${PHP_VERSION:-8.5}-${SYLIUS_LOCALE:-es_CL}
+  build:
+    context: ./image
+    args:
+      SYLIUS_STANDARD_VERSION: ${SYLIUS_STANDARD_VERSION:-2.2.4}
+      SYLIUS_VERSION: ${SYLIUS_VERSION:-2.2.9}
+      PHP_VERSION: ${PHP_VERSION:-8.5}
+      SYLIUS_LOCALE: ${SYLIUS_LOCALE:-es_CL}
+  logging: *logging
+  entrypoint: ["sh", "/usr/local/share/stack/scripts/entrypoint.sh"]
+
+x-sylius-env: &sylius-env
+  APP_ENV: prod
+  APP_DEBUG: "0"
+  APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env}
+  SYLIUS_URL: ${SYLIUS_URL:?Set SYLIUS_URL in .env (e.g. https://shop.example.com)}
+  # Used by Symfony for URLs outside requests (e.g. emails from the worker).
+  DEFAULT_URI: ${SYLIUS_URL:?Set SYLIUS_URL in .env (e.g. https://shop.example.com)}
+  SYMFONY_TRUSTED_PROXIES: private_ranges
+  DB_HOST: db
+  DB_PORT: 3306
+  DB_NAME: ${DB_NAME:-sylius}
+  DB_USER: ${DB_USER:-sylius}
+  DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+  DB_SERVER_VERSION: ${MARIADB_VERSION:-11.4}.0-MariaDB
+  KEYS_DIR: /var/lib/sylius/keys
+  JWT_SECRET_KEY: /var/lib/sylius/keys/jwt/private.pem
+  JWT_PUBLIC_KEY: /var/lib/sylius/keys/jwt/public.pem
+  JWT_PASSPHRASE: ${JWT_PASSPHRASE:?Set JWT_PASSPHRASE in .env}
+  SYLIUS_PAYMENT_ENCRYPTION_KEY_PATH: /var/lib/sylius/keys/payment/encryption.key
+  SYLIUS_MAILER_SENDER_NAME: ${SMTP_FROM_NAME:-Sylius}
+  SYLIUS_MAILER_SENDER_ADDRESS: ${SMTP_FROM:-no-reply@example.com}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURE: ${SMTP_SECURE:-}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
+  PHP_DISPLAY_ERRORS: ${PHP_DISPLAY_ERRORS:-Off}
+  PHP_MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-120}
+  PHP_OPCACHE_VALIDATE_TIMESTAMPS: ${PHP_OPCACHE_VALIDATE_TIMESTAMPS:-0}
+  UPLOAD_MAX_SIZE: ${UPLOAD_MAX_SIZE:-32M}
+  TZ: ${TIMEZONE:-America/Santiago}
+
+x-sylius-volumes: &sylius-volumes
+  - keys:/var/lib/sylius/keys
+  - media:/app/public/media
+  - ./scripts:/usr/local/share/stack/scripts:ro
+  - ./config/php/php.ini:/usr/local/etc/php/conf.d/zz-stack.ini:ro
+
+services:
+  db:
+    image: mariadb:${MARIADB_VERSION:-11.4}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-sylius}
+      MARIADB_USER: ${DB_USER:-sylius}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${DB_MEMORY_LIMIT:-1g}
+
+  # One-shot job: keys, database install or migrations, admin user and store
+  # settings, public files for Caddy. Safe to repeat; runs on every `up`.
+  setup:
+    <<: *sylius
+    restart: "no"
+    user: root
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *sylius-env
+      SYLIUS_ADMIN_EMAIL: ${SYLIUS_ADMIN_EMAIL:?Set SYLIUS_ADMIN_EMAIL in .env}
+      SYLIUS_ADMIN_PASSWORD: ${SYLIUS_ADMIN_PASSWORD:?Set SYLIUS_ADMIN_PASSWORD in .env}
+      SYLIUS_STORE_NAME: ${SYLIUS_STORE_NAME:-Sylius}
+      SYLIUS_LOCALE: ${SYLIUS_LOCALE:-es_CL}
+      SYLIUS_CURRENCY: ${SYLIUS_CURRENCY:-CLP}
+      SYLIUS_COUNTRY: ${SYLIUS_COUNTRY:-CL}
+      SYLIUS_ZONE_NAME: ${SYLIUS_ZONE_NAME:-Chile}
+      SYLIUS_TAX_RATE: ${SYLIUS_TAX_RATE-19}
+      SYLIUS_TAX_NAME: ${SYLIUS_TAX_NAME:-IVA}
+      SYLIUS_TAX_CATEGORY_NAME: ${SYLIUS_TAX_CATEGORY_NAME:-Afecto}
+      SYLIUS_SHIPPING_NAME: ${SYLIUS_SHIPPING_NAME:-Despacho}
+      SYLIUS_PAYMENT_NAME: ${SYLIUS_PAYMENT_NAME:-Transferencia bancaria}
+      SYLIUS_PRICES_INCLUDE_TAX: ${SYLIUS_PRICES_INCLUDE_TAX:-true}
+    volumes:
+      - keys:/var/lib/sylius/keys
+      - media:/app/public/media
+      - public:/srv/public
+      - ./scripts:/usr/local/share/stack/scripts:ro
+      - ./config/php/php.ini:/usr/local/etc/php/conf.d/zz-stack.ini:ro
+    command: ["sh", "/usr/local/share/stack/scripts/setup.sh"]
+    deploy:
+      resources:
+        limits:
+          memory: ${SETUP_MEMORY_LIMIT:-768m}
+
+  # PHP-FPM with Sylius (port 9000, internal).
+  php:
+    <<: *sylius
+    restart: unless-stopped
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      <<: *sylius-env
+      PHP_FPM_MAX_CHILDREN: ${PHP_FPM_MAX_CHILDREN:-10}
+      PHP_FPM_START_SERVERS: ${PHP_FPM_START_SERVERS:-2}
+      PHP_FPM_MIN_SPARE_SERVERS: ${PHP_FPM_MIN_SPARE_SERVERS:-1}
+      PHP_FPM_MAX_SPARE_SERVERS: ${PHP_FPM_MAX_SPARE_SERVERS:-4}
+      PHP_FPM_MAX_REQUESTS: ${PHP_FPM_MAX_REQUESTS:-500}
+    # Lets Sylius reach services on the host (e.g. an app running locally)
+    # at http://host.docker.internal:<port>, also on Linux.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - keys:/var/lib/sylius/keys
+      - media:/app/public/media
+      - ./scripts:/usr/local/share/stack/scripts:ro
+      - ./config/php/php.ini:/usr/local/etc/php/conf.d/zz-stack.ini:ro
+      - ./config/php/fpm-pool.conf:/usr/local/etc/php-fpm.d/zz-stack.conf:ro
+    command: ["php-fpm"]
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q php-fpm /proc/1/cmdline"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          memory: ${PHP_MEMORY_LIMIT_CONTAINER:-1g}
+
+  # Symfony Messenger worker: asynchronous Sylius messages (e.g. catalog
+  # promotions); restarted every hour to free memory.
+  worker:
+    <<: *sylius
+    restart: unless-stopped
+    user: www-data
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      <<: *sylius-env
+    volumes: *sylius-volumes
+    command: ["php", "bin/console", "messenger:consume", "main", "catalog_promotion_removal",
+              "--time-limit=3600", "--memory-limit=256M", "--no-interaction"]
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q messenger:consume /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: ${WORKER_MEMORY_LIMIT:-512m}
+
+  # Periodic commands (scripts/cron.sh): unpaid orders and expired carts.
+  cron:
+    <<: *sylius
+    restart: unless-stopped
+    user: root
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      <<: *sylius-env
+      CRON_INTERVAL: ${CRON_INTERVAL:-3600}
+    volumes: *sylius-volumes
+    command: ["sh", "/usr/local/share/stack/scripts/cron.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/cron-heartbeat -mmin -$$(( $${CRON_INTERVAL} / 60 + 10 )) | grep -q ."]
+      interval: 1m
+      timeout: 5s
+      retries: 3
+      start_period: 2m
+    deploy:
+      resources:
+        limits:
+          memory: ${CRON_MEMORY_LIMIT:-512m}
+
+  caddy:
+    image: caddy:${CADDY_VERSION:-2.11}-alpine
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      php:
+        condition: service_healthy
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      UPLOAD_MAX_SIZE: ${UPLOAD_MAX_SIZE:-32M}
+    ports:
+      - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-80}:80"
+      - "${HTTP_BIND:-127.0.0.1}:${HTTPS_PORT:-443}:443"
+      - "${HTTP_BIND:-127.0.0.1}:${HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - public:/srv/public:ro
+      - media:/srv/public/media:ro
+      # TLS certificates and keys (keep them: ACME rate limits).
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${CADDY_MEMORY_LIMIT:-256m}
+
+  # Sylius's console (profile "tools"), as www-data, e.g.:
+  #   docker compose run --rm console sylius:user:promote --help
+  console:
+    <<: *sylius
+    profiles: ["tools"]
+    user: www-data
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      <<: *sylius-env
+    volumes: *sylius-volumes
+    entrypoint: ["sh", "/usr/local/share/stack/scripts/entrypoint.sh", "php", "bin/console"]
+    command: ["list", "sylius"]
+    deploy:
+      resources:
+        limits:
+          memory: ${CONSOLE_MEMORY_LIMIT:-768m}
+
+  # Optional (profile "backup"): database dump + uploads + keys every
+  # BACKUP_INTERVAL_HOURS, kept BACKUP_KEEP_DAYS days in the `backups` volume
+  # (overrides/local-dirs.yaml puts them in a local directory instead).
+  backup:
+    image: mariadb:${MARIADB_VERSION:-11.4}
+    profiles: ["backup"]
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-sylius}
+      DB_USER: ${DB_USER:-sylius}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
+    volumes:
+      # Read-write so `backup.sh restore` can put them back.
+      - media:/data/media
+      - keys:/data/keys
+      - backups:/backups
+      - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: ["bash", "/usr/local/bin/backup.sh"]
+    healthcheck:
+      test: ["CMD", "bash", "/usr/local/bin/backup.sh", "health"]
+      interval: 5m
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+    deploy:
+      resources:
+        limits:
+          memory: ${BACKUP_MEMORY_LIMIT:-512m}
+
+  # Optional (profile "mailpit", development): catches all outgoing mail.
+  # Set SMTP_HOST=mailpit and SMTP_PORT=1025; web UI on MAILPIT_PORT.
+  mailpit:
+    image: axllent/mailpit:${MAILPIT_VERSION:-v1.31}
+    profiles: ["mailpit"]
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "${HTTP_BIND:-127.0.0.1}:${MAILPIT_PORT:-8025}:8025"
+
+volumes:
+  db_data:
+  keys:
+  media:
+  public:
+  caddy_data:
+  caddy_config:
+  backups:
