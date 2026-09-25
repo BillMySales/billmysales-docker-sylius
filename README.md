@@ -215,6 +215,10 @@ before `composer update`. Then `docker compose up -d --build`. A BillMySales
 integration would be a Sylius plugin (a listener of the order's state
 machine) or a client of the Admin API.
 
+- Composer commands in the image run with `--no-scripts`: Symfony Runtime
+  isn't there before the install, so the project's scripts would fail.
+- `assets:install` and `cache:warmup` need `php -d memory_limit=-1`.
+
 Overrides
 ---------
 
@@ -326,6 +330,15 @@ What was checked for this stack (2026-09-24):
   ports (client IP kept), local directories (fresh install, owners `82`).
 - Not tested: issuing a real Let's Encrypt certificate (needs a public
   domain), SMTPS/STARTTLS with a real provider, Adyen/Mollie/PayPal.
+
+Testing
+-------
+
+- Admin login with curl: GET `/admin/login` for the session cookie and the
+  `_csrf_admin_security_token` field, then POST the form with that token to
+  `/admin/login-check`.
+- Admin API: a JWT from `POST /api/v2/admin/administrators/token` (see
+  [Configuration](#configuration)).
 
 Resource usage
 --------------
