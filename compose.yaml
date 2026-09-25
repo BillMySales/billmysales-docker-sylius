@@ -39,7 +39,10 @@ x-sylius-env: &sylius-env
   SYLIUS_URL: ${SYLIUS_URL:?Set SYLIUS_URL in .env (e.g. https://shop.example.com)}
   # Used by Symfony for URLs outside requests (e.g. emails from the worker).
   DEFAULT_URI: ${SYLIUS_URL:?Set SYLIUS_URL in .env (e.g. https://shop.example.com)}
-  SYMFONY_TRUSTED_PROXIES: private_ranges
+  # The direct peer: Caddy, PHP-FPM's only client, which passes the real
+  # client IP (also in REMOTE_ADDR, so a list of private ranges wouldn't
+  # match a public client) and scheme, never what a client sent.
+  SYMFONY_TRUSTED_PROXIES: REMOTE_ADDR
   DB_HOST: db
   DB_PORT: 3306
   DB_NAME: ${DB_NAME:-sylius}

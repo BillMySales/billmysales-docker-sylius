@@ -261,9 +261,12 @@ Notes:
   displayed unless `PHP_DISPLAY_ERRORS=On`), OPcache without file checks.
   Sylius's logs go to stderr (`docker compose logs`) instead of files inside
   the container; deprecation notices are dropped.
-- Symfony trusts `X-Forwarded-*` from private addresses
-  (`SYMFONY_TRUSTED_PROXIES=private_ranges`): links and secure cookies follow
-  the public `https://` address behind Caddy and Traefik.
+- Symfony trusts `X-Forwarded-*` from its direct peer, Caddy
+  (`SYMFONY_TRUSTED_PROXIES=REMOTE_ADDR`), which sends the real client IP
+  and scheme and never passes what a client sent (it drops
+  `X-Forwarded-Port`): links and secure cookies follow the public
+  `https://` address behind Caddy and Traefik, also for public client IPs
+  (with `private_ranges`, the admin redirected to `http://` for them).
 - The Shop and Admin APIs are enabled (Sylius-Standard enables them only in
   development). Admin API: `POST /api/v2/admin/administrators/token` with the
   admin's email and password returns a JWT.
@@ -274,9 +277,10 @@ Security
 --------
 
 - Client IP headers: PHP gets only the real client IP (as Caddy sees it) in
-  `REMOTE_ADDR`, `X-Forwarded-For` and `X-Real-IP`, and no `Client-Ip` or
-  `Cf-Connecting-Ip` (a client could forge them): Symfony only trusts them
-  from private addresses; set like in the other PHP stacks.
+  `REMOTE_ADDR`, `X-Forwarded-For` and `X-Real-IP`, and no `Client-Ip`,
+  `Cf-Connecting-Ip` or `X-Forwarded-Port` (a client could forge them), so
+  Symfony can trust Caddy's headers as they come; set like in the other PHP
+  stacks.
 - No default secrets: compose fails if the required passwords and secrets are
   missing. The development template uses public values; never use it on a
   server.

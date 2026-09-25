@@ -26,6 +26,10 @@
 	header_up X-Real-IP {client_ip}
 	header_up -Client-Ip
 	header_up -Cf-Connecting-Ip
+	# Caddy doesn't reset X-Forwarded-Port (unlike -For/-Proto/-Host) for
+	# untrusted clients, and apps that trust Caddy would build URLs with a
+	# forged port; the port is in the Host header anyway.
+	header_up -X-Forwarded-Port
 }
 
 (sylius) {
