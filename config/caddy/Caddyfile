@@ -18,6 +18,16 @@
 	}
 }
 
+# Proxy headers that PHP apps read directly (order IPs, login logs...)
+# instead of REMOTE_ADDR: only the real client IP, never what the client
+# sent (php_fastcgi would pass the whole, forgeable X-Forwarded-For chain).
+(client_ip_headers) {
+	header_up X-Forwarded-For {client_ip}
+	header_up X-Real-IP {client_ip}
+	header_up -Client-Ip
+	header_up -Cf-Connecting-Ip
+}
+
 (sylius) {
 	root * /srv/public
 	encode zstd gzip
@@ -42,6 +52,7 @@
 		php_fastcgi php:9000 {
 			root /app/public
 			env REMOTE_ADDR {client_ip}
+			import client_ip_headers
 		}
 	}
 	handle @blocked {
@@ -58,6 +69,7 @@
 		php_fastcgi php:9000 {
 			root /app/public
 			env REMOTE_ADDR {client_ip}
+			import client_ip_headers
 		}
 		file_server
 	}
