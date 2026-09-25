@@ -37,6 +37,8 @@ x-sylius-env: &sylius-env
   APP_DEBUG: "0"
   APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env}
   SYLIUS_URL: ${SYLIUS_URL:?Set SYLIUS_URL in .env (e.g. https://shop.example.com)}
+  # Other host names Sylius answers to (comma separated), e.g. www.example.com.
+  SYLIUS_EXTRA_HOSTS: ${SYLIUS_EXTRA_HOSTS:-}
   # Used by Symfony for URLs outside requests (e.g. emails from the worker).
   DEFAULT_URI: ${SYLIUS_URL:?Set SYLIUS_URL in .env (e.g. https://shop.example.com)}
   # The direct peer: Caddy, PHP-FPM's only client, which passes the real

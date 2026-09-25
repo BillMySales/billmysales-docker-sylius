@@ -240,8 +240,8 @@ Configuration
 
 Every variable is documented in `.env.prod.example`. Main groups:
 
-- **Site and network**: `SYLIUS_URL`, `SITE_ADDRESS`, `HTTP_BIND`,
-  `HTTP_PORT`, `HTTPS_PORT`, `TIMEZONE`.
+- **Site and network**: `SYLIUS_URL`, `SYLIUS_EXTRA_HOSTS`, `SITE_ADDRESS`,
+  `HTTP_BIND`, `HTTP_PORT`, `HTTPS_PORT`, `TIMEZONE`.
 - **Credentials**: `APP_SECRET`, `JWT_PASSPHRASE`, `DB_PASSWORD`,
   `DB_ROOT_PASSWORD`, `SYLIUS_ADMIN_EMAIL`, `SYLIUS_ADMIN_PASSWORD`
   (required).
@@ -276,6 +276,14 @@ Notes:
 Security
 --------
 
+- **Host header**: Sylius builds links from the request's `Host` (the
+  channel has no hostname, and Caddy's `:80` site answers any host): a
+  password reset requested with a forged `Host` mailed a valid reset link to
+  that host (found 2026-09-25). Symfony now only accepts the host of
+  `SYLIUS_URL`, `SYLIUS_EXTRA_HOSTS` and loopback names (healthchecks):
+  `SYMFONY_TRUSTED_HOSTS`, built by `scripts/entrypoint.sh`; other hosts get
+  HTTP 400. With `SITE_ADDRESS` set to a domain or behind Traefik, other
+  hosts never reach PHP anyway.
 - Client IP headers: PHP gets only the real client IP (as Caddy sees it) in
   `REMOTE_ADDR`, `X-Forwarded-For` and `X-Real-IP`, and no `Client-Ip`,
   `Cf-Connecting-Ip` or `X-Forwarded-Port` (a client could forge them), so

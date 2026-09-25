@@ -28,4 +28,15 @@ else
 fi
 export MAILER_DSN
 
+# Symfony only answers to the host of SYLIUS_URL, SYLIUS_EXTRA_HOSTS (comma
+# separated) and loopback names (Caddy's healthcheck): Sylius builds links
+# from the request's Host, and a password reset requested with a forged Host
+# mailed a valid reset link to that host.
+SYMFONY_TRUSTED_HOSTS="$(php -r '
+    $hosts = array_filter(array_map("trim", explode(",", (string) getenv("SYLIUS_EXTRA_HOSTS"))));
+    $hosts[] = (string) parse_url((string) getenv("SYLIUS_URL"), PHP_URL_HOST);
+    array_push($hosts, "localhost", "127.0.0.1");
+    echo implode(",", array_map(fn ($h) => "^" . preg_quote($h) . "\$", array_unique(array_filter($hosts))));')"
+export SYMFONY_TRUSTED_HOSTS
+
 exec docker-php-entrypoint "$@"
