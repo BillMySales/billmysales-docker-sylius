@@ -177,12 +177,16 @@ and `<timestamp>-files.tar.gz` (uploads and keys) to the `backups` volume (or
 Files are readable by their owner only (they contain the keys).
 
 ```shell
-docker compose run --rm backup now                  # back up now
-docker compose run --rm backup list                 # list timestamps
+docker compose run --rm --no-deps backup now                  # back up now
+docker compose run --rm --no-deps backup list                 # list timestamps
 docker compose stop php worker cron                 # stop the app first
-docker compose run --rm backup restore <timestamp>  # database, uploads and keys
+docker compose run --rm --no-deps backup restore <timestamp>  # database, uploads and keys
 docker compose up -d
 ```
+
+`--no-deps` keeps the command from starting `setup` first (with damaged
+data `setup` fails and the restore would never run); the database must
+be running (`docker compose up -d db` if the stack is down).
 
 A restore drops every table first, so nothing created after the backup
 remains.
