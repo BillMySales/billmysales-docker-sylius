@@ -63,9 +63,9 @@ Production
 
 ```shell
 cp .env.prod.example .env
-# Fill in SYLIUS_URL, SITE_ADDRESS, APP_SECRET, JWT_PASSPHRASE, DB_PASSWORD,
-# DB_ROOT_PASSWORD, SYLIUS_ADMIN_EMAIL, SYLIUS_ADMIN_PASSWORD and the SMTP_*
-# values.
+# Required: SYLIUS_URL, SITE_ADDRESS, APP_SECRET, JWT_PASSPHRASE, DB_PASSWORD,
+# DB_ROOT_PASSWORD, SYLIUS_ADMIN_EMAIL, SYLIUS_ADMIN_PASSWORD. Recommended:
+# the SMTP_* values.
 docker compose up -d --build
 ```
 
@@ -73,6 +73,9 @@ docker compose up -d --build
   and renews it automatically (certificates live in the `caddy_data` volume).
 - Behind another TLS-terminating proxy, use `SITE_ADDRESS=:80`.
 - Compose refuses to start while a required value is missing.
+- Configure SMTP (recommended, not required): without `SMTP_HOST` Sylius
+  sends no emails (order confirmations, account verification, password
+  resets).
 - The `backup` profile is enabled by default in the production template.
 - Behind an existing Traefik (no host ports), use `overrides/traefik.yaml`
   (see [Overrides](#overrides)).
@@ -157,7 +160,9 @@ Sylius sends them itself (Symfony Mailer): order and shipment confirmations,
 account verification, password resets (shop and admin), contact form.
 SMTP comes from `SMTP_*` (`SMTP_SECURE`: empty or `tls` = STARTTLS when the
 server offers it, `ssl` = SMTPS, `none` = never TLS); without `SMTP_HOST`
-emails are discarded. The sender is `SMTP_FROM` / `SMTP_FROM_NAME`.
+emails are discarded. The sender is `SMTP_FROM` / `SMTP_FROM_NAME`;
+`SMTP_FROM` is also the channel's contact email, set only when `setup`
+creates the channel.
 
 Payments
 --------
