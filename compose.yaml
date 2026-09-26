@@ -76,6 +76,13 @@ x-sylius-volumes: &sylius-volumes
   - ./scripts:/usr/local/share/stack/scripts:ro
   - ./config/php/php.ini:/usr/local/etc/php/conf.d/zz-stack.ini:ro
 
+# Lets Sylius reach services on the host (e.g. an app running locally)
+# at http://host.docker.internal:<port>, also on Linux.
+# Every container that runs the platform's code: its web process, setup,
+# cron, workers, the console (Docker Desktop resolves it anyway).
+x-host-access: &host-access
+  - "host.docker.internal:host-gateway"
+
 services:
   db:
     image: mariadb:${MARIADB_VERSION:-11.4}
@@ -123,6 +130,7 @@ services:
       SYLIUS_SHIPPING_NAME: ${SYLIUS_SHIPPING_NAME:-Despacho}
       SYLIUS_PAYMENT_NAME: ${SYLIUS_PAYMENT_NAME:-Transferencia bancaria}
       SYLIUS_PRICES_INCLUDE_TAX: ${SYLIUS_PRICES_INCLUDE_TAX:-true}
+    extra_hosts: *host-access
     volumes:
       - keys:/var/lib/sylius/keys
       - media:/app/public/media
@@ -149,10 +157,7 @@ services:
       PHP_FPM_MIN_SPARE_SERVERS: ${PHP_FPM_MIN_SPARE_SERVERS:-1}
       PHP_FPM_MAX_SPARE_SERVERS: ${PHP_FPM_MAX_SPARE_SERVERS:-4}
       PHP_FPM_MAX_REQUESTS: ${PHP_FPM_MAX_REQUESTS:-500}
-    # Lets Sylius reach services on the host (e.g. an app running locally)
-    # at http://host.docker.internal:<port>, also on Linux.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    extra_hosts: *host-access
     volumes:
       - keys:/var/lib/sylius/keys
       - media:/app/public/media
@@ -181,6 +186,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *sylius-env
+    extra_hosts: *host-access
     volumes: *sylius-volumes
     command: ["php", "bin/console", "messenger:consume", "main", "catalog_promotion_removal",
               "--time-limit=3600", "--memory-limit=256M", "--no-interaction"]
@@ -205,6 +211,7 @@ services:
     environment:
       <<: *sylius-env
       CRON_INTERVAL: ${CRON_INTERVAL:-3600}
+    extra_hosts: *host-access
     volumes: *sylius-volumes
     command: ["sh", "/usr/local/share/stack/scripts/cron.sh"]
     healthcheck:
@@ -261,6 +268,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *sylius-env
+    extra_hosts: *host-access
     volumes: *sylius-volumes
     entrypoint: ["sh", "/usr/local/share/stack/scripts/entrypoint.sh", "php", "bin/console"]
     command: ["list", "sylius"]
