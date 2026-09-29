@@ -287,8 +287,8 @@ Security
 
 - **Host header**: Sylius builds links from the request's `Host` (the
   channel has no hostname, and Caddy's `:80` site answers any host): a
-  password reset requested with a forged `Host` mailed a valid reset link to
-  that host (found 2026-09-25). Symfony now only accepts the host of
+  password reset requested with a forged `Host` mails a valid reset link to
+  that host. Symfony only accepts the host of
   `SYLIUS_URL`, `SYLIUS_EXTRA_HOSTS` and loopback names (healthchecks):
   `SYMFONY_TRUSTED_HOSTS`, built by `scripts/entrypoint.sh`; other hosts get
   HTTP 400. With `SITE_ADDRESS` set to a domain or behind Traefik, other
@@ -313,7 +313,7 @@ Security
 Validation
 ----------
 
-What was checked for this stack (2026-09-24):
+What was checked for this stack:
 
 - Clean start (`down -v` + `up -d`, image built) in about 35 s: every service `healthy`,
   `setup` `Exited (0)`; a second run makes no changes.
